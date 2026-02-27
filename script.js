@@ -436,8 +436,21 @@ function createRoom() {
     });
 }
 
-function joinRoom() {
-    const code = els.joinCodeInput.value.trim().toUpperCase();
+function joinRoom(autoCode = null) {
+    let rawCode = typeof autoCode === 'string' ? autoCode : els.joinCodeInput.value.trim();
+
+    // Extract room code if user pasted a full URL
+    if (rawCode.includes('?room=')) {
+        rawCode = rawCode.split('?room=')[1].split('&')[0];
+    } else if (rawCode.includes('http')) {
+        // Fallback for random URL pasting
+        const parts = rawCode.split('/');
+        rawCode = parts[parts.length - 1];
+    }
+
+    // Clean out invalid characters (PeerJS doesn't like special chars like '/')
+    const code = rawCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
     if (code.length < 4) {
         els.joinCodeInput.style.borderColor = '#d63031';
         setTimeout(() => els.joinCodeInput.style.borderColor = '', 1500);
@@ -889,7 +902,12 @@ els.joinCodeInput.addEventListener('keydown', (e) => {
 // Copy code
 els.copyCodeBtn.addEventListener('click', () => {
     const code = els.roomCodeValue.textContent;
-    navigator.clipboard.writeText(code).then(() => {
+    // Generate robust URL for sharing - works in dev and prod
+    const urlObj = new URL(window.location.href);
+    urlObj.searchParams.set('room', code);
+    const shareUrl = urlObj.toString();
+
+    navigator.clipboard.writeText(shareUrl).then(() => {
         els.copyCodeBtn.textContent = '✅';
         els.copyCodeBtn.classList.add('copied');
         setTimeout(() => {
@@ -899,7 +917,7 @@ els.copyCodeBtn.addEventListener('click', () => {
     }).catch(() => {
         // Fallback
         const ta = document.createElement('textarea');
-        ta.value = code;
+        ta.value = shareUrl;
         document.body.appendChild(ta);
         ta.select();
         document.execCommand('copy');
@@ -958,3 +976,17 @@ document.addEventListener('keydown', (e) => {
 // ===== INIT =====
 initLobby();
 initParticles();
+
+// Check for deep link
+const urlParams = new URLSearchParams(window.location.search);
+const roomParam = urlParams.get('room');
+if (roomParam) {
+    // Wait until peerjs loads
+    setTimeout(() => {
+        showScreen('room-screen');
+        els.joinCodeInput.value = roomParam;
+        joinRoom(roomParam);
+        // Clean URL without reloading
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }, 100);
+}
