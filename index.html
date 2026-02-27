@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Water Gun | 3D Battle Arena</title>
+    <meta name="description"
+        content="Play Snake Water Gun in a stunning 3D arena. Challenge the CPU or play with friends online!">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <canvas id="particles-canvas"></canvas>
+
+    <!-- ===== LOBBY SCREEN ===== -->
+    <div class="screen lobby-screen active" id="lobby-screen">
+        <header class="game-header">
+            <h1 class="title-glow">
+                <span class="title-icon">⚔️</span> SNAKE WATER GUN <span class="title-icon">⚔️</span>
+            </h1>
+            <p class="subtitle">The Ultimate 3D Battle Arena</p>
+        </header>
+
+        <!-- Player Profile Card -->
+        <div class="profile-card" id="profile-card">
+            <div class="profile-avatar-wrap">
+                <div class="profile-avatar">
+                    <span class="profile-avatar-emoji">🎮</span>
+                </div>
+                <span class="profile-id" id="profile-id">#0000</span>
+            </div>
+            <div class="profile-info">
+                <label class="profile-label">YOUR NICKNAME</label>
+                <input type="text" class="nickname-input" id="nickname-input" placeholder="Enter nickname..."
+                    maxlength="16" autocomplete="off">
+            </div>
+        </div>
+
+        <!-- Mode Selection -->
+        <div class="mode-selection">
+            <button class="mode-btn cpu-mode-btn" id="btn-cpu-mode">
+                <span class="mode-icon">🤖</span>
+                <div class="mode-text">
+                    <span class="mode-title">Play vs CPU</span>
+                    <span class="mode-desc">Challenge the computer</span>
+                </div>
+                <span class="mode-arrow">→</span>
+            </button>
+            <button class="mode-btn friend-mode-btn" id="btn-friend-mode">
+                <span class="mode-icon">👥</span>
+                <div class="mode-text">
+                    <span class="mode-title">Play with Friend</span>
+                    <span class="mode-desc">Create or join a room</span>
+                </div>
+                <span class="mode-arrow">→</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ===== ROOM SCREEN ===== -->
+    <div class="screen room-screen" id="room-screen">
+        <header class="game-header">
+            <h1 class="title-glow" style="font-size:clamp(1.2rem,3vw,2rem)">
+                <span class="title-icon">👥</span> MULTIPLAYER <span class="title-icon">👥</span>
+            </h1>
+        </header>
+
+        <button class="back-btn" id="room-back-btn">← Back to Lobby</button>
+
+        <div class="room-options">
+            <!-- Create Room -->
+            <div class="room-card" id="create-room-card">
+                <div class="room-card-header">
+                    <span class="room-card-icon">🏠</span>
+                    <h3 class="room-card-title">CREATE ROOM</h3>
+                </div>
+                <p class="room-card-desc">Generate a code and share it with your friend</p>
+                <button class="room-action-btn create-btn" id="btn-create-room">
+                    <span>Create Room</span>
+                    <span class="room-action-icon">✨</span>
+                </button>
+            </div>
+
+            <!-- Join Room -->
+            <div class="room-card" id="join-room-card">
+                <div class="room-card-header">
+                    <span class="room-card-icon">🔗</span>
+                    <h3 class="room-card-title">JOIN ROOM</h3>
+                </div>
+                <p class="room-card-desc">Enter the code shared by your friend</p>
+                <div class="room-code-input-wrap">
+                    <input type="text" class="room-code-input" id="join-code-input" placeholder="ENTER CODE"
+                        maxlength="6" autocomplete="off">
+                </div>
+                <button class="room-action-btn join-btn" id="btn-join-room">
+                    <span>Join Room</span>
+                    <span class="room-action-icon">🚀</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Waiting State (shown after creating/joining) -->
+        <div class="waiting-room" id="waiting-room" style="display:none">
+            <div class="waiting-spinner"></div>
+            <h3 class="waiting-title" id="waiting-title">Waiting for opponent...</h3>
+            <div class="room-code-display" id="room-code-display" style="display:none">
+                <span class="room-code-label">ROOM CODE</span>
+                <div class="room-code-value-wrap">
+                    <span class="room-code-value" id="room-code-value"></span>
+                    <button class="copy-btn" id="copy-code-btn" title="Copy code">📋</button>
+                </div>
+                <p class="room-code-hint">Share this code with your friend!</p>
+            </div>
+            <div class="connection-status" id="connection-status">
+                <div class="conn-dot"></div>
+                <span class="conn-text">Connecting...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== GAME SCREEN (Arena) ===== -->
+    <div class="screen game-screen" id="game-screen">
+        <header class="game-header" id="game-header">
+            <h1 class="title-glow" style="font-size:clamp(1.2rem,3vw,2rem)">
+                <span class="title-icon">⚔️</span> BATTLE ARENA <span class="title-icon">⚔️</span>
+            </h1>
+            <button class="back-btn game-back-btn" id="game-back-btn">← Leave</button>
+        </header>
+
+        <!-- Score Board -->
+        <div class="scoreboard" id="scoreboard">
+            <div class="score-item player-score-box">
+                <span class="score-label" id="p1-name-label">YOU</span>
+                <span class="score-value" id="player-score">0</span>
+            </div>
+            <div class="score-divider">
+                <span class="round-label">Round <span id="round-number">1</span></span>
+                <span class="vs-text">VS</span>
+            </div>
+            <div class="score-item cpu-score-box">
+                <span class="score-label" id="p2-name-label">CPU</span>
+                <span class="score-value" id="cpu-score">0</span>
+            </div>
+        </div>
+
+        <!-- Timer -->
+        <div class="timer-container" id="timer-container" style="display:none">
+            <svg class="timer-ring" viewBox="0 0 120 120">
+                <circle class="timer-ring-bg" cx="60" cy="60" r="52"></circle>
+                <circle class="timer-ring-progress" id="timer-ring-progress" cx="60" cy="60" r="52"></circle>
+            </svg>
+            <span class="timer-value" id="timer-value">7</span>
+        </div>
+
+        <!-- Main Arena -->
+        <main class="arena">
+            <section class="arena-side player-side" id="player-side">
+                <div class="side-header">
+                    <div class="avatar player-avatar">
+                        <div class="avatar-ring"></div>
+                        <span class="avatar-icon">🎮</span>
+                    </div>
+                    <h2 class="side-title" id="p1-side-title">PLAYER</h2>
+                    <div class="status-indicator online"></div>
+                </div>
+                <div class="choice-display" id="player-choice-display">
+                    <div class="card-3d-container" id="player-card-container">
+                        <div class="card-3d waiting-card">
+                            <div class="card-face card-front">
+                                <span class="card-question">?</span>
+                                <p class="card-hint">Choose your weapon</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="weapon-selection" id="weapon-selection">
+                    <button class="weapon-btn" data-choice="snake" id="btn-snake">
+                        <div class="weapon-3d-wrapper">
+                            <div class="weapon-3d">
+                                <div class="weapon-face weapon-front snake-front"><span class="weapon-emoji">🐍</span>
+                                </div>
+                                <div class="weapon-face weapon-back snake-back"></div>
+                                <div class="weapon-face weapon-left snake-left"></div>
+                                <div class="weapon-face weapon-right snake-right"></div>
+                                <div class="weapon-face weapon-top snake-top"></div>
+                                <div class="weapon-face weapon-bottom snake-bottom"></div>
+                            </div>
+                        </div>
+                        <span class="weapon-label">SNAKE</span>
+                        <div class="weapon-glow snake-glow"></div>
+                    </button>
+                    <button class="weapon-btn" data-choice="water" id="btn-water">
+                        <div class="weapon-3d-wrapper">
+                            <div class="weapon-3d">
+                                <div class="weapon-face weapon-front water-front"><span class="weapon-emoji">💧</span>
+                                </div>
+                                <div class="weapon-face weapon-back water-back"></div>
+                                <div class="weapon-face weapon-left water-left"></div>
+                                <div class="weapon-face weapon-right water-right"></div>
+                                <div class="weapon-face weapon-top water-top"></div>
+                                <div class="weapon-face weapon-bottom water-bottom"></div>
+                            </div>
+                        </div>
+                        <span class="weapon-label">WATER</span>
+                        <div class="weapon-glow water-glow"></div>
+                    </button>
+                    <button class="weapon-btn" data-choice="gun" id="btn-gun">
+                        <div class="weapon-3d-wrapper">
+                            <div class="weapon-3d">
+                                <div class="weapon-face weapon-front gun-front"><span class="weapon-emoji">🔫</span>
+                                </div>
+                                <div class="weapon-face weapon-back gun-back"></div>
+                                <div class="weapon-face weapon-left gun-left"></div>
+                                <div class="weapon-face weapon-right gun-right"></div>
+                                <div class="weapon-face weapon-top gun-top"></div>
+                                <div class="weapon-face weapon-bottom gun-bottom"></div>
+                            </div>
+                        </div>
+                        <span class="weapon-label">GUN</span>
+                        <div class="weapon-glow gun-glow"></div>
+                    </button>
+                </div>
+            </section>
+
+            <div class="battle-divider" id="battle-divider">
+                <div class="divider-line"></div>
+                <div class="battle-badge" id="battle-badge"><span class="badge-text">VS</span></div>
+                <div class="divider-line"></div>
+            </div>
+
+            <section class="arena-side cpu-side" id="cpu-side">
+                <div class="side-header">
+                    <div class="avatar cpu-avatar">
+                        <div class="avatar-ring"></div>
+                        <span class="avatar-icon" id="p2-avatar-icon">🤖</span>
+                    </div>
+                    <h2 class="side-title" id="p2-side-title">CPU</h2>
+                    <div class="status-indicator online cpu-indicator"></div>
+                </div>
+                <div class="choice-display" id="cpu-choice-display">
+                    <div class="card-3d-container" id="cpu-card-container">
+                        <div class="card-3d waiting-card cpu-waiting">
+                            <div class="card-face card-front">
+                                <span class="card-question">?</span>
+                                <p class="card-hint">Waiting...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="cpu-thinking" id="cpu-thinking">
+                    <div class="thinking-dots"><span></span><span></span><span></span></div>
+                    <p class="thinking-text">CPU is ready</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Result Overlay -->
+        <div class="result-overlay" id="result-overlay">
+            <div class="result-content" id="result-content">
+                <div class="result-icon" id="result-icon"></div>
+                <h2 class="result-title" id="result-title"></h2>
+                <p class="result-detail" id="result-detail"></p>
+                <button class="play-again-btn" id="play-again-btn">
+                    <span class="btn-text">PLAY AGAIN</span>
+                    <span class="btn-icon">🔄</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Rules (global) -->
+    <div class="game-rules" id="game-rules">
+        <button class="rules-toggle" id="rules-toggle">📜 Rules</button>
+        <div class="rules-panel" id="rules-panel">
+            <h3>Game Rules</h3>
+            <ul>
+                <li>🐍 Snake <strong>drinks</strong> 💧 Water → Snake wins</li>
+                <li>💧 Water <strong>douses</strong> 🔫 Gun → Water wins</li>
+                <li>🔫 Gun <strong>kills</strong> 🐍 Snake → Gun wins</li>
+                <li>Same choice = Draw!</li>
+                <li>⏱️ 7 seconds to choose (multiplayer)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
