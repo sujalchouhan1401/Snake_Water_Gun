@@ -81,6 +81,10 @@
                     <h3 class="room-card-title">CREATE ROOM</h3>
                 </div>
                 <p class="room-card-desc">Generate a code and share it with your friend</p>
+                <div class="room-settings">
+                    <label class="room-label" for="rounds-input">TOTAL ROUNDS</label>
+                    <input type="number" class="rounds-input" id="rounds-input" value="3" min="1" max="10">
+                </div>
                 <button class="room-action-btn create-btn" id="btn-create-room">
                     <span>Create Room</span>
                     <span class="room-action-icon">✨</span>
@@ -155,7 +159,7 @@
                 <circle class="timer-ring-bg" cx="60" cy="60" r="52"></circle>
                 <circle class="timer-ring-progress" id="timer-ring-progress" cx="60" cy="60" r="52"></circle>
             </svg>
-            <span class="timer-value" id="timer-value">7</span>
+            <span class="timer-value" id="timer-value">12</span>
         </div>
 
         <!-- Main Arena -->
@@ -284,7 +288,7 @@
                 <li>💧 Water <strong>douses</strong> 🔫 Gun → Water wins</li>
                 <li>🔫 Gun <strong>kills</strong> 🐍 Snake → Gun wins</li>
                 <li>Same choice = Draw!</li>
-                <li>⏱️ 7 seconds to choose (multiplayer)</li>
+                <li>⏱️ 12 seconds to choose (multiplayer)</li>
             </ul>
         </div>
     </div>

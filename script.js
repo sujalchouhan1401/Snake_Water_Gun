@@ -5,7 +5,7 @@ const CHOICES = {
     gun: { emoji: '🔫', name: 'GUN', class: 'gun-card', value: 2 }
 };
 const CHOICE_KEYS = ['snake', 'water', 'gun'];
-const TIMER_DURATION = 7;
+const TIMER_DURATION = 12;
 const TIMER_CIRCUMFERENCE = 2 * Math.PI * 52; // r=52
 
 // ===== GAME STATE =====
@@ -29,7 +29,9 @@ const state = {
     roomCode: '',
     opponentName: 'CPU',
     opponentId: '',
-    roundReady: false
+    roundReady: false,
+    totalRounds: 3,
+    opponentScreenReady: false
 };
 
 function generatePlayerId() {
@@ -64,6 +66,7 @@ const els = {
     roomCodeValue: $('room-code-value'),
     copyCodeBtn: $('copy-code-btn'),
     connectionStatus: $('connection-status'),
+    roundsInput: $('rounds-input'),
     // Game
     gameBackBtn: $('game-back-btn'),
     playerScore: $('player-score'),
@@ -250,6 +253,7 @@ function spawnConfetti(count) {
 // ===== TIMER =====
 function startTimer(onExpire) {
     state.timerValue = TIMER_DURATION;
+    els.timerValueEl.textContent = TIMER_DURATION;
     els.timerContainer.style.display = 'flex';
     updateTimerDisplay();
 
@@ -308,7 +312,12 @@ function setupGameScreen() {
     state.opponentChoice = null;
     els.playerScore.textContent = '0';
     els.cpuScore.textContent = '0';
-    els.roundNumber.textContent = '1';
+
+    if (state.mode === 'friend') {
+        els.roundNumber.textContent = `1 / ${state.totalRounds}`;
+    } else {
+        els.roundNumber.textContent = '1';
+    }
 
     resetCards();
     hideTimer();
@@ -382,6 +391,7 @@ function generateRoomCode() {
 
 function createRoom() {
     state.isHost = true;
+    state.totalRounds = parseInt(els.roundsInput.value) || 3;
     state.roomCode = generateRoomCode();
 
     // Show waiting UI
@@ -469,7 +479,8 @@ function setupConnection(conn) {
         conn.send({
             type: 'profile',
             name: getDisplayName(),
-            id: state.playerId
+            id: state.playerId,
+            totalRounds: state.totalRounds
         });
         setConnectionStatus('connected', 'Connected!');
     });
@@ -496,10 +507,28 @@ function handlePeerMessage(data) {
         case 'profile':
             state.opponentName = data.name || 'Player#' + data.id;
             state.opponentId = data.id;
-            // Both connected: start game after short delay
+            if (data.totalRounds) {
+                state.totalRounds = data.totalRounds;
+            }
+            // Both connected: start game
             setTimeout(() => {
                 startMultiplayerGame();
             }, 1000);
+            break;
+
+        case 'screen-ready':
+            state.opponentScreenReady = true;
+            if (state.isHost && state.roundReady && state.opponentScreenReady) {
+                // Both host and client screens are ready, send explicit start
+                state.conn.send({ type: 'start-round' });
+                startMultiplayerRound();
+            }
+            break;
+
+        case 'start-round':
+            if (!state.isHost) {
+                startMultiplayerRound();
+            }
             break;
 
         case 'choice':
@@ -512,7 +541,11 @@ function handlePeerMessage(data) {
 
         case 'ready':
             state.roundReady = true;
-            startMultiplayerRound();
+            if (state.isHost && state.opponentScreenReady) {
+                // For subsequent rounds
+                state.conn.send({ type: 'start-round' });
+                startMultiplayerRound();
+            }
             break;
 
         case 'play-again':
@@ -526,14 +559,18 @@ function startMultiplayerGame() {
     setupGameScreen();
     showScreen('game-screen');
 
-    // Start first round with small delay
-    setTimeout(() => {
-        if (state.isHost) {
-            state.conn.send({ type: 'ready' });
-        }
-        state.roundReady = true;
+    // Notify opponent that we are physically on the game screen now
+    if (state.conn && state.conn.open) {
+        state.conn.send({ type: 'screen-ready' });
+    }
+
+    state.roundReady = true;
+
+    // If host, we already sent screen-ready, now we wait for opponent's screen-ready
+    if (state.isHost && state.opponentScreenReady) {
+        state.conn.send({ type: 'start-round' });
         startMultiplayerRound();
-    }, 500);
+    }
 }
 
 function startMultiplayerRound() {
@@ -542,8 +579,10 @@ function startMultiplayerRound() {
     state.opponentChoice = null;
     state.isPlaying = false;
 
+    els.roundNumber.textContent = `${state.round} / ${state.totalRounds}`;
+
     els.cpuThinking.querySelector('.thinking-text').textContent = 'Choosing...';
-    // Start 7-second timer
+    // Start 12-second timer
     startTimer(() => {
         // Timer expired
         handleTimerExpiry();
@@ -617,7 +656,20 @@ function handleTimerExpiry() {
             showResultCustom('draw', '⏱️', 'TIME OUT!', 'Neither player chose in time!');
         }, 800);
     }
-    // If both chose, checkMultiplayerResult already handles it
+    // If both chose, checkMultiplayerResult already handles it. It handles final result there or here if timeout.
+
+    // Check if game is over
+    if (state.round >= state.totalRounds) {
+        setTimeout(showFinalMatchResult, 2500);
+    } else {
+        // if we did not reach total_rounds yet, and timer expired, we want to auto-continue if BOTH didn't answer within 3 seconds
+        // If one of the players answered, they will click play again normally.
+        if (!iChose && !oppChose) {
+            setTimeout(() => {
+                playAgain();
+            }, 3000);
+        }
+    }
 }
 
 function checkMultiplayerResult() {
@@ -635,7 +687,39 @@ function checkMultiplayerResult() {
     els.playerScore.textContent = state.playerScore;
     els.cpuScore.textContent = state.opponentScore;
 
-    setTimeout(() => showResult(result, state.myChoice, state.opponentChoice), 800);
+    setTimeout(() => {
+        showResult(result, state.myChoice, state.opponentChoice);
+        if (state.round >= state.totalRounds) {
+            setTimeout(showFinalMatchResult, 2500);
+        }
+    }, 800);
+}
+
+function showFinalMatchResult() {
+    let title = "MATCH OVER!";
+    let detail = "";
+    let icon = "🎯";
+    let type = "draw";
+
+    if (state.playerScore > state.opponentScore) {
+        title = "YOU WON THE MATCH! 🎉";
+        detail = `Final Score: ${state.playerScore} - ${state.opponentScore}`;
+        icon = "🏆";
+        type = "win";
+        spawnConfetti(100);
+    } else if (state.playerScore < state.opponentScore) {
+        title = "YOU LOST THE MATCH 💀";
+        detail = `Final Score: ${state.playerScore} - ${state.opponentScore}`;
+        icon = "💔";
+        type = "lose";
+    } else {
+        title = "MATCH DRAWN 🤝";
+        detail = `Final Score: ${state.playerScore} - ${state.opponentScore}`;
+        type = "draw";
+    }
+
+    showResultCustom(type, icon, title, detail);
+    els.playAgainBtn.querySelector('.btn-text').textContent = 'MAIN MENU';
 }
 
 function revealMultiplayerCards() {
@@ -652,8 +736,14 @@ function revealMultiplayerCards() {
 }
 
 function resetMultiplayerRound() {
+    if (state.round >= state.totalRounds) {
+        // Matches finished, play again means back to lobby or full reset
+        leaveGame();
+        return;
+    }
+
     state.round++;
-    els.roundNumber.textContent = state.round;
+    els.roundNumber.textContent = `${state.round} / ${state.totalRounds}`;
     state.myChoice = null;
     state.opponentChoice = null;
     state.isPlaying = false;
@@ -670,7 +760,11 @@ function resetMultiplayerRound() {
             state.conn.send({ type: 'ready' });
         }
         state.roundReady = true;
-        startMultiplayerRound();
+        // Host waits for opponent's ready to fire state-round
+        if (state.isHost && state.opponentScreenReady) {
+            state.conn.send({ type: 'start-round' });
+            startMultiplayerRound();
+        }
     }, 500);
 }
 
@@ -710,11 +804,15 @@ function playAgain() {
         els.cpuThinking.querySelector('.thinking-text').textContent = 'CPU is ready';
     } else {
         // Multiplayer: notify opponent
-        els.resultOverlay.classList.remove('active');
-        if (state.conn && state.conn.open) {
-            state.conn.send({ type: 'play-again' });
+        if (state.round >= state.totalRounds) {
+            leaveGame(); // Match over, go to lobby
+        } else {
+            els.resultOverlay.classList.remove('active');
+            if (state.conn && state.conn.open) {
+                state.conn.send({ type: 'play-again' });
+            }
+            resetMultiplayerRound();
         }
-        resetMultiplayerRound();
     }
 }
 
@@ -733,7 +831,9 @@ function leaveGame() {
     state.myChoice = null;
     state.opponentChoice = null;
     state.roundReady = false;
+    state.opponentScreenReady = false;
     els.resultOverlay.classList.remove('active');
+    els.playAgainBtn.querySelector('.btn-text').textContent = 'PLAY AGAIN';
 
     // Reset room screen UI
     els.createRoomCard.style.display = '';
