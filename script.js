@@ -532,7 +532,8 @@ function handlePeerMessage(data) {
         case 'profile':
             state.opponentName = data.name || 'Player#' + data.id;
             state.opponentId = data.id;
-            if (data.totalRounds) {
+            // Only update total rounds if we are joining the room (not the host)
+            if (!state.isHost && data.totalRounds) {
                 state.totalRounds = data.totalRounds;
             }
             // Both connected: start game
