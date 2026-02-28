@@ -5,7 +5,7 @@ const CHOICES = {
     gun: { emoji: '🔫', name: 'GUN', class: 'gun-card', value: 2 }
 };
 const CHOICE_KEYS = ['snake', 'water', 'gun'];
-const TIMER_DURATION = 12;
+const TIMER_DURATION = 30;
 const TIMER_CIRCUMFERENCE = 2 * Math.PI * 52; // r=52
 
 // ===== GAME STATE =====
@@ -31,7 +31,19 @@ const state = {
     opponentId: '',
     roundReady: false,
     totalRounds: 3,
-    opponentScreenReady: false
+    opponentScreenReady: false,
+    playAgainReady: false,
+    opponentPlayAgainReady: false
+};
+
+const peerConfig = {
+    config: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+    },
+    debug: 0
 };
 
 function generatePlayerId() {
@@ -406,7 +418,7 @@ function createRoom() {
     // Create PeerJS peer with room code as ID
     const peerId = 'swg_' + state.roomCode;
     try {
-        state.peer = new Peer(peerId, { debug: 0 });
+        state.peer = new Peer(peerId, peerConfig);
     } catch (e) {
         setConnectionStatus('error', 'Failed to create room');
         return;
@@ -468,7 +480,7 @@ function joinRoom(autoCode = null) {
     setConnectionStatus('connecting');
 
     try {
-        state.peer = new Peer(undefined, { debug: 0 });
+        state.peer = new Peer(undefined, peerConfig);
     } catch (e) {
         setConnectionStatus('error', 'Connection failed');
         return;
@@ -561,8 +573,9 @@ function handlePeerMessage(data) {
             }
             break;
 
-        case 'play-again':
-            resetMultiplayerRound();
+        case 'play-again-ready':
+            state.opponentPlayAgainReady = true;
+            checkPlayAgainReady();
             break;
     }
 }
@@ -673,13 +686,14 @@ function handleTimerExpiry() {
 
     // Check if game is over
     if (state.round >= state.totalRounds) {
+        els.playAgainBtn.style.display = 'none';
         setTimeout(showFinalMatchResult, 2500);
     } else {
         // if we did not reach total_rounds yet, and timer expired, we want to auto-continue if BOTH didn't answer within 3 seconds
         // If one of the players answered, they will click play again normally.
         if (!iChose && !oppChose) {
             setTimeout(() => {
-                playAgain();
+                if (!state.playAgainReady) playAgain();
             }, 3000);
         }
     }
@@ -703,6 +717,7 @@ function checkMultiplayerResult() {
     setTimeout(() => {
         showResult(result, state.myChoice, state.opponentChoice);
         if (state.round >= state.totalRounds) {
+            els.playAgainBtn.style.display = 'none';
             setTimeout(showFinalMatchResult, 2500);
         }
     }, 800);
@@ -732,6 +747,7 @@ function showFinalMatchResult() {
     }
 
     showResultCustom(type, icon, title, detail);
+    els.playAgainBtn.style.display = 'flex';
     els.playAgainBtn.querySelector('.btn-text').textContent = 'MAIN MENU';
 }
 
@@ -761,6 +777,8 @@ function resetMultiplayerRound() {
     state.opponentChoice = null;
     state.isPlaying = false;
     state.roundReady = false;
+    state.playAgainReady = false;
+    state.opponentPlayAgainReady = false;
     els.resultOverlay.classList.remove('active');
     resetCards();
     hideTimer();
@@ -807,6 +825,13 @@ function showResultCustom(type, icon, title, detail) {
 }
 
 // ===== PLAY AGAIN =====
+function checkPlayAgainReady() {
+    if (state.playAgainReady && state.opponentPlayAgainReady) {
+        els.playAgainBtn.querySelector('.btn-text').textContent = 'PLAY AGAIN';
+        resetMultiplayerRound();
+    }
+}
+
 function playAgain() {
     if (state.mode === 'cpu') {
         state.isPlaying = false;
@@ -820,11 +845,12 @@ function playAgain() {
         if (state.round >= state.totalRounds) {
             leaveGame(); // Match over, go to lobby
         } else {
-            els.resultOverlay.classList.remove('active');
+            state.playAgainReady = true;
+            els.playAgainBtn.querySelector('.btn-text').textContent = 'WAITING...';
             if (state.conn && state.conn.open) {
-                state.conn.send({ type: 'play-again' });
+                state.conn.send({ type: 'play-again-ready' });
             }
-            resetMultiplayerRound();
+            checkPlayAgainReady();
         }
     }
 }
@@ -845,7 +871,10 @@ function leaveGame() {
     state.opponentChoice = null;
     state.roundReady = false;
     state.opponentScreenReady = false;
+    state.playAgainReady = false;
+    state.opponentPlayAgainReady = false;
     els.resultOverlay.classList.remove('active');
+    els.playAgainBtn.style.display = 'flex';
     els.playAgainBtn.querySelector('.btn-text').textContent = 'PLAY AGAIN';
 
     // Reset room screen UI
