@@ -554,23 +554,36 @@ function setupConnection(conn) {
     conn.on('open', () => {
         debugLog('CONN', 'Data connection established');
 
+        const sendProfile = () => {
+            if (conn.open) {
+                conn.send({
+                    type: 'profile',
+                    name: getDisplayName(),
+                    id: state.playerId,
+                    totalRounds: state.totalRounds
+                });
+            }
+        };
+
+        // Send immediately and after a short delay to prevent WebRTC initial drop
+        sendProfile();
+        setTimeout(sendProfile, 500);
+
         // Start heartbeat to keep connection alive and detect drops
         heartbeatInterval = setInterval(() => {
             if (conn.open) {
                 conn.send({ type: 'heartbeat', ts: Date.now() });
+
+                // If we are still waiting for opponent's profile, keep trying to send ours
+                if (!state.opponentId) {
+                    sendProfile();
+                }
             } else {
                 handleDisconnect();
             }
-        }, 5000);
+        }, 3000);
 
-        // Send our profile info
-        conn.send({
-            type: 'profile',
-            name: getDisplayName(),
-            id: state.playerId,
-            totalRounds: state.totalRounds
-        });
-        setConnectionStatus('connected', 'Connected!');
+        setConnectionStatus('connected', 'Connected! Synchronizing...');
     });
 
     conn.on('data', (data) => {
