@@ -37,6 +37,10 @@ const state = {
 };
 
 const peerConfig = {
+    host: '0.peerjs.com',
+    port: 443,
+    path: '/',
+    pingInterval: 5000,
     config: {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -45,14 +49,7 @@ const peerConfig = {
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
             { urls: 'stun:stun.services.mozilla.com' },
-            // TURN server placeholder - Replace with Metered.ca or Twilio credentials
-            /* 
-            { 
-              urls: 'turn:your-turn-server.com', 
-              username: 'your-username', 
-              credential: 'your-password' 
-            } 
-            */
+            { urls: 'stun:global.stun.twilio.com:3478' }
         ]
     },
     debug: 1 // Increased debug level for production troubleshooting
@@ -701,7 +698,7 @@ function startMultiplayerRound() {
     els.roundNumber.textContent = `${state.round} / ${state.totalRounds}`;
 
     els.cpuThinking.querySelector('.thinking-text').textContent = 'Choosing...';
-    // Start 12-second timer
+    // Start 30-second timer
     startTimer(() => {
         // Timer expired
         handleTimerExpiry();
