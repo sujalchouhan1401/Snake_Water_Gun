@@ -37,41 +37,14 @@ const state = {
 };
 
 const peerConfig = {
-    host: '0.peerjs.com',
-    port: 443,
-    path: '/',
-    pingInterval: 5000,
     config: {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-            { urls: 'stun:stun.services.mozilla.com' },
             { urls: 'stun:global.stun.twilio.com:3478' }
         ]
     },
-    debug: 1 // Increased debug level for production troubleshooting
+    debug: 0
 };
-
-// Helper for structured logging
-function debugLog(category, message, data = null) {
-    const timestamp = new Date().toLocaleTimeString();
-    const color = {
-        'CONN': '#00cec9',
-        'DATA': '#6c5ce7',
-        'ERROR': '#d63031',
-        'SYSTEM': '#fd79a8'
-    }[category] || '#dfe6e9';
-
-    console.log(
-        `%c[SWG-3D] [${timestamp}] [${category}] %c${message}`,
-        `color: ${color}; font-weight: bold`,
-        'color: inherit',
-        data || ''
-    );
-}
 
 function generatePlayerId() {
     const id = String(Math.floor(1000 + Math.random() * 9000));
@@ -451,34 +424,27 @@ function createRoom() {
         return;
     }
 
-    state.peer.on('open', (id) => {
-        debugLog('CONN', `Room created with ID: ${id}`);
-        setConnectionStatus('connecting', 'Room created! Waiting for opponent...');
+    state.peer.on('open', () => {
+        setConnectionStatus('connecting', 'Room created! Waiting...');
     });
 
     state.peer.on('connection', (conn) => {
-        debugLog('CONN', 'Incoming connection received');
         state.conn = conn;
         setupConnection(conn);
     });
 
     state.peer.on('error', (err) => {
-        debugLog('ERROR', `Peer Error: ${err.type}`, err);
-        let msg = 'Connection error';
         if (err.type === 'unavailable-id') {
-            msg = 'Code taken. Trying again...';
+            setConnectionStatus('error', 'Code taken. Try again.');
             setTimeout(() => {
                 state.roomCode = generateRoomCode();
                 els.roomCodeValue.textContent = state.roomCode;
                 if (state.peer) state.peer.destroy();
                 createRoom();
-            }, 2000);
-        } else if (err.type === 'peer-unavailable') {
-            msg = 'Peer not found';
-        } else if (err.type === 'network') {
-            msg = 'Network error (check firewall)';
+            }, 1500);
+        } else {
+            setConnectionStatus('error', 'Connection error');
         }
-        setConnectionStatus('error', msg);
     });
 }
 
@@ -520,113 +486,45 @@ function joinRoom(autoCode = null) {
         return;
     }
 
-    // Connection timeout safety
-    const connectionTimeout = setTimeout(() => {
-        if (state.conn && !state.conn.open) {
-            debugLog('ERROR', 'Connection attempt timed out');
-            setConnectionStatus('error', 'Connection timed out');
-            if (state.peer) state.peer.destroy();
-        }
-    }, 15000);
-
-    state.peer.on('open', (id) => {
+    state.peer.on('open', () => {
         const peerId = 'swg_' + code;
-        debugLog('CONN', `Attempting to connect to: ${peerId}`);
         const conn = state.peer.connect(peerId, { reliable: true });
         state.conn = conn;
-
-        conn.on('open', () => {
-            clearTimeout(connectionTimeout);
-            setupConnection(conn);
-        });
+        setupConnection(conn);
     });
 
     state.peer.on('error', (err) => {
-        clearTimeout(connectionTimeout);
-        debugLog('ERROR', `Join Error: ${err.type}`, err);
-        setConnectionStatus('error', 'Room not found or network error');
+        setConnectionStatus('error', 'Room not found or error');
     });
 }
 
 function setupConnection(conn) {
-    let heartbeatInterval;
-
     conn.on('open', () => {
-        debugLog('CONN', 'Data connection established');
-
-        const sendProfile = () => {
-            if (conn.open) {
-                conn.send({
-                    type: 'profile',
-                    name: getDisplayName(),
-                    id: state.playerId,
-                    totalRounds: state.totalRounds
-                });
-            }
-        };
-
-        // Send immediately and after a short delay to prevent WebRTC initial drop
-        sendProfile();
-        setTimeout(sendProfile, 500);
-
-        // Start heartbeat to keep connection alive and detect drops
-        heartbeatInterval = setInterval(() => {
-            if (conn.open) {
-                conn.send({ type: 'heartbeat', ts: Date.now() });
-
-                // If we are still waiting for opponent's profile, keep trying to send ours
-                if (!state.opponentId) {
-                    sendProfile();
-                }
-            } else {
-                handleDisconnect();
-            }
-        }, 3000);
-
-        setConnectionStatus('connected', 'Connected! Synchronizing...');
+        // Send our profile info
+        conn.send({
+            type: 'profile',
+            name: getDisplayName(),
+            id: state.playerId,
+            totalRounds: state.totalRounds
+        });
+        setConnectionStatus('connected', 'Connected!');
     });
 
     conn.on('data', (data) => {
-        if (data.type !== 'heartbeat') {
-            debugLog('DATA', `Received: ${data.type}`, data);
-            handlePeerMessage(data);
+        handlePeerMessage(data);
+    });
+
+    conn.on('close', () => {
+        setConnectionStatus('error', 'Opponent disconnected');
+        stopTimer();
+        if (state.isPlaying) {
+            state.isPlaying = false;
         }
     });
 
-    function handleDisconnect() {
-        clearInterval(heartbeatInterval);
-        debugLog('ERROR', 'Opponent disconnected or connection lost');
-
-        // If we were in the middle of a game screen, award automatic victory
-        if ($('game-screen').classList.contains('active')) {
-            setConnectionStatus('error', 'Opponent left! You win by default! 🏆');
-            stopTimer();
-
-            // Increment score and show result
-            state.playerScore++;
-            els.playerScore.textContent = state.playerScore;
-
-            setTimeout(() => {
-                showResultCustom('win', '🏆', 'VICTORY BY FORFEIT!', 'Opponent has abandoned the arena.');
-                spawnConfetti(60);
-            }, 800);
-        } else {
-            setConnectionStatus('error', 'Connection lost');
-        }
-
-        // Auto-leave after 8 seconds if connection doesn't restore, 
-        // giving user time to see the victory screen
-        setTimeout(() => {
-            if (!state.conn || !state.conn.open) {
-                if (!els.resultOverlay.classList.contains('active') || state.round >= state.totalRounds) {
-                    leaveGame();
-                }
-            }
-        }, 8000);
-    }
-
-    conn.on('close', handleDisconnect);
-    conn.on('error', handleDisconnect);
+    conn.on('error', () => {
+        setConnectionStatus('error', 'Connection error');
+    });
 }
 
 function handlePeerMessage(data) {
@@ -711,7 +609,7 @@ function startMultiplayerRound() {
     els.roundNumber.textContent = `${state.round} / ${state.totalRounds}`;
 
     els.cpuThinking.querySelector('.thinking-text').textContent = 'Choosing...';
-    // Start 30-second timer
+    // Start 12-second timer
     startTimer(() => {
         // Timer expired
         handleTimerExpiry();
