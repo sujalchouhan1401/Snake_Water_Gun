@@ -946,6 +946,14 @@ body {
     letter-spacing: 1px
 }
 
+.result-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 .play-again-btn {
     font-family: 'Orbitron', sans-serif;
     font-size: 0.85rem;
@@ -998,6 +1006,19 @@ body {
 
 .play-again-btn:hover .btn-icon {
     transform: rotate(180deg)
+}
+
+.leave-match-btn {
+    border-color: rgba(214, 48, 49, 0.4);
+    background: linear-gradient(135deg, rgba(214, 48, 49, 0.2), rgba(160, 32, 32, 0.1));
+}
+
+.leave-match-btn::before {
+    background: linear-gradient(135deg, #d63031, #e17055);
+}
+
+.leave-match-btn:hover {
+    box-shadow: 0 10px 30px rgba(214, 48, 49, 0.4);
 }
 
 /* ===== GAME RULES ===== */

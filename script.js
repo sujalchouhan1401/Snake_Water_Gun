@@ -100,6 +100,7 @@ const els = {
     resultTitle: $('result-title'),
     resultDetail: $('result-detail'),
     playAgainBtn: $('play-again-btn'),
+    leaveMatchBtn: $('leave-match-btn'),
     rulesToggle: $('rules-toggle'),
     rulesPanel: $('rules-panel'),
     canvas: $('particles-canvas')
@@ -520,6 +521,13 @@ function setupConnection(conn) {
         if (state.isPlaying) {
             state.isPlaying = false;
         }
+        if (els.resultOverlay.classList.contains('active') && els.resultDetail.textContent !== 'The other player does not want to play more.') {
+            els.resultTitle.textContent = 'MATCH ENDED';
+            els.resultTitle.className = 'result-title';
+            els.resultDetail.textContent = 'Opponent disconnected.';
+            els.playAgainBtn.style.display = 'none';
+            if (els.leaveMatchBtn) els.leaveMatchBtn.querySelector('.btn-text').textContent = 'MAIN MENU';
+        }
     });
 
     conn.on('error', () => {
@@ -577,6 +585,16 @@ function handlePeerMessage(data) {
         case 'play-again-ready':
             state.opponentPlayAgainReady = true;
             checkPlayAgainReady();
+            break;
+
+        case 'leave-match':
+            if (els.resultOverlay.classList.contains('active')) {
+                els.resultTitle.textContent = 'MATCH ENDED';
+                els.resultTitle.className = 'result-title';
+                els.resultDetail.textContent = 'The other player does not want to play more.';
+                els.playAgainBtn.style.display = 'none';
+                if (els.leaveMatchBtn) els.leaveMatchBtn.querySelector('.btn-text').textContent = 'MAIN MENU';
+            }
             break;
     }
 }
@@ -749,7 +767,9 @@ function showFinalMatchResult() {
 
     showResultCustom(type, icon, title, detail);
     els.playAgainBtn.style.display = 'flex';
-    els.playAgainBtn.querySelector('.btn-text').textContent = 'MAIN MENU';
+    els.playAgainBtn.classList.remove('disabled');
+    els.playAgainBtn.querySelector('.btn-text').textContent = 'REMATCH';
+    els.leaveMatchBtn.style.display = 'flex';
 }
 
 function revealMultiplayerCards() {
@@ -829,12 +849,30 @@ function showResultCustom(type, icon, title, detail) {
 function checkPlayAgainReady() {
     if (state.playAgainReady && state.opponentPlayAgainReady) {
         els.playAgainBtn.querySelector('.btn-text').textContent = 'PLAY AGAIN';
+        els.playAgainBtn.classList.remove('disabled');
+        els.leaveMatchBtn.style.display = 'none';
+
+        if (state.round >= state.totalRounds) {
+            state.round = 0;
+            state.playerScore = 0;
+            state.opponentScore = 0;
+            els.playerScore.textContent = '0';
+            els.cpuScore.textContent = '0';
+        }
+
         resetMultiplayerRound();
     }
 }
 
 function playAgain() {
     if (state.mode === 'cpu') {
+        if (state.round >= state.totalRounds) {
+            state.playerScore = 0;
+            state.opponentScore = 0;
+            state.round = 0;
+            els.playerScore.textContent = '0';
+            els.cpuScore.textContent = '0';
+        }
         state.isPlaying = false;
         state.round++;
         els.roundNumber.textContent = state.round;
@@ -843,16 +881,13 @@ function playAgain() {
         els.cpuThinking.querySelector('.thinking-text').textContent = 'CPU is ready';
     } else {
         // Multiplayer: notify opponent
-        if (state.round >= state.totalRounds) {
-            leaveGame(); // Match over, go to lobby
-        } else {
-            state.playAgainReady = true;
-            els.playAgainBtn.querySelector('.btn-text').textContent = 'WAITING...';
-            if (state.conn && state.conn.open) {
-                state.conn.send({ type: 'play-again-ready' });
-            }
-            checkPlayAgainReady();
+        state.playAgainReady = true;
+        els.playAgainBtn.querySelector('.btn-text').textContent = 'WAITING...';
+        els.playAgainBtn.classList.add('disabled');
+        if (state.conn && state.conn.open) {
+            state.conn.send({ type: 'play-again-ready' });
         }
+        checkPlayAgainReady();
     }
 }
 
@@ -876,7 +911,10 @@ function leaveGame() {
     state.opponentPlayAgainReady = false;
     els.resultOverlay.classList.remove('active');
     els.playAgainBtn.style.display = 'flex';
+    els.playAgainBtn.classList.remove('disabled');
     els.playAgainBtn.querySelector('.btn-text').textContent = 'PLAY AGAIN';
+    els.leaveMatchBtn.style.display = 'none';
+    els.leaveMatchBtn.querySelector('.btn-text').textContent = 'LEAVE';
 
     // Reset room screen UI
     els.createRoomCard.style.display = '';
@@ -970,6 +1008,16 @@ els.weaponBtns.forEach(btn => {
 
 // Game: Play again
 els.playAgainBtn.addEventListener('click', playAgain);
+
+// Game: Leave match btn 
+els.leaveMatchBtn.addEventListener('click', () => {
+    if (state.conn && state.conn.open) {
+        state.conn.send({ type: 'leave-match' });
+        setTimeout(() => leaveGame(), 100);
+    } else {
+        leaveGame();
+    }
+});
 
 // Game: Leave
 els.gameBackBtn.addEventListener('click', leaveGame);
